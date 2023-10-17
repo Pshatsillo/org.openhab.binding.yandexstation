@@ -5,3 +5,6 @@
 /.github/
 licenses/epl-2.0/header.txt
 licenses/epl-2.0/xml-header-style.xml
+resp.json
+src/main/history/dependencies.xml
+src/response.json
