@@ -14,6 +14,7 @@ package org.openhab.binding.yandexstation.internal;
 
 import static org.openhab.binding.yandexstation.internal.YandexStationBridge.getTokenApi;
 import static org.openhab.binding.yandexstation.internal.YandexStationScenarios.SEPARATOR_CHARS;
+import static org.openhab.binding.yandexstation.internal.yandexapi.YandexApiOnline.SCENARIOUS_URL;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -57,7 +58,9 @@ import com.google.gson.JsonParser;
 @NonNullByDefault
 public class YandexScenariosHandler extends BaseThingHandler {
     private final Logger logger = LoggerFactory.getLogger(YandexScenariosHandler.class);
+
     private @Nullable ScheduledFuture<?> refreshPollingJob;
+    public static final int reconnectInterval = 15;
     @Nullable
     YandexStationBridge yandexStationBridge;
     private @Nullable Future<?> initJob;
@@ -108,11 +111,9 @@ public class YandexScenariosHandler extends BaseThingHandler {
                                 yaScn.addScenario(scn, channel, encode(context.x));
                                 scnList.put(context.x, yaScn);
                                 String json = yaScn.updateScenario(encode(context.x));
-                                ApiResponse response = api.sendPutJsonRequest(
-                                        "https://iot.quasar.yandex.ru/m/user/scenarios/" + scn.id, json, "");
+                                ApiResponse response = api.sendPutJsonRequest(SCENARIOUS_URL + "/" + scn.id, json, "");
                                 if (response.httpCode == 403) {
-                                    response = api.sendPutJsonRequest(
-                                            "https://iot.quasar.yandex.ru/m/user/scenarios/" + scn.id, json, "update");
+                                    response = api.sendPutJsonRequest(SCENARIOUS_URL + "/" + scn.id, json, "update");
                                 }
                                 logger.debug("response script update: {}", response.response);
                                 context.x++;
@@ -125,8 +126,7 @@ public class YandexScenariosHandler extends BaseThingHandler {
                         YandexStationScenarios yaScn = new YandexStationScenarios();
                         String json = yaScn.createScenario(channel, encode(context.x));
                         try {
-                            ApiResponse response = api
-                                    .sendPostJsonRequest("https://iot.quasar.yandex.ru/m/user/scenarios", json, "");
+                            ApiResponse response = api.sendPostJsonRequest(SCENARIOUS_URL, json, "");
                             logger.debug("response script creation: {}", response.response);
                         } catch (ApiException ignored) {
                         }
@@ -148,19 +148,28 @@ public class YandexScenariosHandler extends BaseThingHandler {
                     });
                     if (!ref.present) {
                         if (scn.name.startsWith(SEPARATOR_CHARS)) {
-                            ApiResponse response = api
-                                    .sendDeleteJsonRequest("https://iot.quasar.yandex.ru/m/user/scenarios/" + scn.id);
+                            ApiResponse response = api.sendDeleteJsonRequest(SCENARIOUS_URL + "/" + scn.id);
                             logger.debug("response script delete: {}", response.response);
                         }
                     }
                 }
             } catch (ApiException e) {
                 logger.debug("Error {}", e.getMessage());
+                updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
+                try {
+                    if (api.refreshCookie()) {
+                        url = api.getWssUrl();
+                        scenario = api.getScenarios();
+                        device = api.getDevices();
+                    }
+                } catch (ApiException ex) {
+                    throw new RuntimeException(ex);
+                }
             }
             if (refreshPollingJob == null || refreshPollingJob.isCancelled()) {
                 refreshPollingJob = scheduler.scheduleWithFixedDelay(() -> ping(), 0, 1, TimeUnit.MINUTES);
             }
-            initJob = connect();
+            initJob = connect(0);
         }
     }
 
@@ -188,14 +197,14 @@ public class YandexScenariosHandler extends BaseThingHandler {
         }
     }
 
-    private Future<?> connect() {
-        logger.warn("Try connect after: {} sec", 0);
+    private Future<?> connect(int wait) {
+        logger.warn("Try connect after: {} sec", wait);
         return scheduler.schedule(() -> {
             boolean thingReachable = connectStation(url);
             if (thingReachable) {
                 updateStatus(ThingStatus.ONLINE);
             }
-        }, 1, TimeUnit.SECONDS);
+        }, wait, TimeUnit.SECONDS);
     }
 
     private boolean connectStation(String url) {
@@ -206,6 +215,7 @@ public class YandexScenariosHandler extends BaseThingHandler {
         } catch (URISyntaxException e) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.CONFIGURATION_ERROR,
                     "Initialize web socket failed: " + e.getMessage());
+            logger.error("Initialize web socket failed: {}", e.getMessage());
             return false;
         }
 
@@ -264,10 +274,16 @@ public class YandexScenariosHandler extends BaseThingHandler {
 
         try {
             webSocketClient.start();
+            logger.info("YandexScenarios connect to {}", websocketAddress);
             Future<?> session = webSocketClient.connect(yandexStationWebsocket, websocketAddress, clientUpgradeRequest);
             return session.isDone();
         } catch (Exception e) {
-            logger.error("Connection error {}", e.getMessage());
+            // logger.error("Connection error {}", e.getMessage());
+            StringBuilder sb = new StringBuilder();
+            for (StackTraceElement s : e.getStackTrace()) {
+                sb.append(s.toString()).append("\n");
+            }
+            logger.error("Connection error: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
             reconnectWebsocket();
             return false;
         }
@@ -293,14 +309,15 @@ public class YandexScenariosHandler extends BaseThingHandler {
         logger.debug("Try to reconnect");
         try {
             url = api.getWssUrl();
-        } catch (ApiException ignored) {
+        } catch (ApiException e) {
+            updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
         }
         Future<?> job = initJob;
         if (job != null) {
             job.cancel(true);
             initJob = null;
         }
-        initJob = connect();
+        initJob = connect(reconnectInterval);
     }
 
     public String encode(int number) {

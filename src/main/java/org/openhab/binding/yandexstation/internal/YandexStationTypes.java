@@ -27,11 +27,13 @@ public enum YandexStationTypes {
     /**
      * Platform yandex station max yandex station types.
      */
-    PLATFORM_YANDEX_STATION_MAX("yandexstation", "Яндекс Станция Макс", true),
+    PLATFORM_YANDEX_STATION_MAX("yandexstation_2", "Яндекс Станция Макс", true),
+    PLATFORM_YANDEX_STATION_DUO_MAX("chiron", "Яндекс Станция Дуо Макс", true),
     /**
      * Platform yandex station 2 yandex station types.
      */
     PLATFORM_YANDEX_STATION_2("yandexmidi", "Яндекс Станция 2", true),
+    PLATFORM_YANDEX_STATION_MIDI("cucumber", "Станция Миди", true),
     /**
      * Platform yandex station mini yandex station types.
      */
@@ -85,6 +87,8 @@ public enum YandexStationTypes {
      * The Platform prestigio.
      */
     PLATFORM_PRESTIGIO("prestigio_smart_mate", "Prestigio Smartmate", false),
+    PLATFORM_DISPLAY_XIAOMI("quinglong", "Smart Display 10R X10G", false),
+    PLATFORM_ZIGBEE_HUB("saturn", "Yandex Hub", false),
     /**
      * Platform unknown yandex station types.
      */
@@ -147,7 +151,8 @@ public enum YandexStationTypes {
      * @return the boolean
      */
     public static Boolean isLocalApi(String platform) {
-        return Arrays.stream(YandexStationTypes.values()).filter(v -> v.getPlatform().equals(platform)).findFirst()
+        return Arrays.stream(YandexStationTypes.values())
+                .filter(v -> v.getPlatform().equals(platform) || platform.contains(v.getPlatform())).findFirst()
                 .orElse(PLATFORM_UNKNOWN).getLocalApi();
     }
 }

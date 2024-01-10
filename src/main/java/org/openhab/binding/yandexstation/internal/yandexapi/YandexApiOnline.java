@@ -31,6 +31,7 @@ import java.util.concurrent.TimeoutException;
 import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.WWWAuthenticationProtocolHandler;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.StringContentProvider;
@@ -63,7 +64,22 @@ public class YandexApiOnline implements YandexApi {
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
     protected final HttpClient httpClient;
     public static final String YANDEX_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36";
-    public static final String API_URL = "https://passport.yandex.ru/";
+    public static final String USER_TOKEN_CLIENT_ID = "client_id=c0ebe342af7d48fbbbfcf2d2eedb8f9e&client_secret=ad0a908f0aa341a182a37ecd75bc319e";
+    public static final String MUSIC_TOKEN_CLIENT_ID = "client_id=23cabbbdc6cd418abb4b39c32c41195d&client_secret=53bc75238f0c4d08a118e51fe9203300&grant_type=x-token";
+    public static final String API_PROXY_PASSPORT_URL = "https://mobileproxy.passport.yandex.net/1/bundle/oauth/token_by_sessionid";
+    public static final String API_PROXY_AUTH_X_TOKEN_URL = "https://mobileproxy.passport.yandex.net/1/bundle/auth/x_token";
+    public static final String OAUTH_MOBILE_URL = "https://oauth.mobile.yandex.net/1/token";
+    public static final String API_PASSPORT_URL = "https://passport.yandex.ru";
+    public static final String API_REGISTRATION_START_URL = API_PASSPORT_URL
+            + "/registration-validations/auth/multi_step/start";
+    public static final String API_REGISTRATION_COMMIT_URL = API_PASSPORT_URL
+            + "/registration-validations/auth/multi_step/commit_password";
+    public static final String API_CSRF_TOKEN_URL = API_PASSPORT_URL + "/am?";
+    public static final String API_AUTH_WELCOME_URL = API_PASSPORT_URL
+            + "/auth/welcome?retpath=https%3A%2F%2Fpassport.yandex.ru%2F&noreturn=1";
+    public static final String SCENARIOUS_URL = "https://iot.quasar.yandex.ru/m/user/scenarios";
+    public static final String DEVICES_URL = "https://iot.quasar.yandex.ru/m/v3/user/devices";
+    public static final String QUASAR_IOT_URL = "https://yandex.ru/quasar/iot";
     private final CookieManager cookieManager;
     private volatile CookieStore cookieStore = new HttpCookieStore();
     private String bridgeID = "";
@@ -84,12 +100,53 @@ public class YandexApiOnline implements YandexApi {
     public void initialize() throws ApiException {
     }
 
+    public ApiResponse sendGetRequestWithXToken(String path, @Nullable String params, @Nullable String token)
+            throws ApiException {
+        ApiResponse result = new ApiResponse();
+        Request request;
+        httpClient.setConnectTimeout(60 * 1000);
+        httpClient.getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
+        if (params != null) {
+            request = httpClient.newRequest(path + params);
+        } else {
+            request = httpClient.newRequest(path);
+        }
+        // setHeadersWithXToken(request, token);
+        request.method(HttpMethod.GET);
+        String errorReason = "";
+        try {
+            ContentResponse contentResponse = request.send();
+            result.httpCode = contentResponse.getStatus();
+            if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
+                result.response = contentResponse.getContentAsString();
+                writeCookie(cookieStore);
+                return result;
+            } else if (result.httpCode == 401) {
+                errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                logger.error("sendGetRequest: {}", errorReason);
+            } else {
+                errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
+                        contentResponse.getReason());
+                logger.error("sendGetRequest: {}", errorReason);
+            }
+        } catch (InterruptedException | TimeoutException | ExecutionException e) {
+            // logger.error("ERROR {}", e.getMessage());
+            StringBuilder sb = new StringBuilder();
+            for (StackTraceElement s : e.getStackTrace()) {
+                sb.append(s.toString()).append("\n");
+            }
+            logger.error("sendGetRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
+        }
+        throw new ApiException(errorReason);
+    }
+
     @Override
     public ApiResponse sendGetRequest(String path, @Nullable String params, @Nullable String token)
             throws ApiException {
         ApiResponse result = new ApiResponse();
         Request request;
         httpClient.setConnectTimeout(60 * 1000);
+        httpClient.getProtocolHandlers().remove(WWWAuthenticationProtocolHandler.NAME);
         if (params != null) {
             request = httpClient.newRequest(path + params);
         } else {
@@ -103,16 +160,25 @@ public class YandexApiOnline implements YandexApi {
         try {
             ContentResponse contentResponse = request.send();
             result.httpCode = contentResponse.getStatus();
-            if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+            if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                 result.response = contentResponse.getContentAsString();
                 writeCookie(cookieStore);
                 return result;
+            } else if (result.httpCode == 401) {
+                errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                logger.error("sendGetRequest: {}", errorReason);
             } else {
                 errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                         contentResponse.getReason());
+                logger.error("sendGetRequest: {}", errorReason);
             }
         } catch (InterruptedException | TimeoutException | ExecutionException e) {
-            logger.error("ERROR {}", e.getMessage());
+            // logger.error("ERROR {}", e.getMessage());
+            StringBuilder sb = new StringBuilder();
+            for (StackTraceElement s : e.getStackTrace()) {
+                sb.append(s.toString()).append("\n");
+            }
+            logger.error("sendGetRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
         }
         throw new ApiException(errorReason);
     }
@@ -120,6 +186,45 @@ public class YandexApiOnline implements YandexApi {
     @Override
     public ApiResponse sendGetRequest(String path, String token) {
         return new ApiResponse();
+    }
+
+    public ApiResponse sendPostRequestWithXToken(String path, String data, String xToken) throws ApiException {
+        String errorReason = "";
+        ApiResponse result = new ApiResponse();
+        httpClient.setConnectTimeout(60 * 1000);
+        Request request = httpClient.newRequest(path);
+        request.timeout(60, TimeUnit.SECONDS);
+        request.method(HttpMethod.POST);
+        // HttpFields fields = new HttpFields();
+        // fields.add("name", "value");
+        // request.getHeaders().addAll(fields);
+        request.header(HttpHeader.CONTENT_TYPE, "application/x-www-form-urlencoded");
+        request.header("charset", "utf-8");
+        request.header("Ya-Consumer-Authorization", "OAuth " + xToken);
+        request.content(new StringContentProvider(data), "application/x-www-form-urlencoded");
+        try {
+            ContentResponse contentResponse = request.send();
+            result.httpCode = contentResponse.getStatus();
+            if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
+                result.response = contentResponse.getContentAsString();
+                return result;
+            } else if (result.httpCode == 401) {
+                errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                logger.error("sendPostRequest: {}", errorReason);
+            } else {
+                errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
+                        contentResponse.getReason());
+                logger.error("sendPostRequest: {}", errorReason);
+            }
+        } catch (InterruptedException | TimeoutException | ExecutionException e) {
+            // logger.error("ERROR {}", e.getMessage());
+            StringBuilder sb = new StringBuilder();
+            for (StackTraceElement s : e.getStackTrace()) {
+                sb.append(s.toString()).append("\n");
+            }
+            logger.error("sendPostRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
+        }
+        throw new ApiException(errorReason);
     }
 
     @Override
@@ -139,16 +244,25 @@ public class YandexApiOnline implements YandexApi {
         try {
             ContentResponse contentResponse = request.send();
             result.httpCode = contentResponse.getStatus();
-            if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+            if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                 result.response = contentResponse.getContentAsString();
                 writeCookie(cookieStore);
                 return result;
+            } else if (result.httpCode == 401) {
+                errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                logger.error("sendPostRequest: {}", errorReason);
             } else {
                 errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                         contentResponse.getReason());
+                logger.error("sendPostRequest: {}", errorReason);
             }
         } catch (InterruptedException | TimeoutException | ExecutionException e) {
-            logger.error("ERROR {}", e.getMessage());
+            // logger.error("ERROR {}", e.getMessage());
+            StringBuilder sb = new StringBuilder();
+            for (StackTraceElement s : e.getStackTrace()) {
+                sb.append(s.toString()).append("\n");
+            }
+            logger.error("sendPostRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
         }
         throw new ApiException(errorReason);
     }
@@ -171,7 +285,7 @@ public class YandexApiOnline implements YandexApi {
             try {
                 ContentResponse contentResponse = request.send();
                 result.httpCode = contentResponse.getStatus();
-                if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+                if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                     result.response = contentResponse.getContentAsString();
                     JsonObject response = JsonParser.parseString(result.response).getAsJsonObject();
                     if (response.has("status") && response.get("status").getAsString().equals("error")) {
@@ -180,12 +294,21 @@ public class YandexApiOnline implements YandexApi {
                         throw new ApiException(errorReason);
                     }
                     return result;
+                } else if (result.httpCode == 401) {
+                    errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                    logger.error("sendPostRequestForToken: {}", errorReason);
                 } else {
                     errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                             contentResponse.getReason());
+                    logger.error("sendPostRequestForToken: {}", errorReason);
                 }
             } catch (InterruptedException | TimeoutException | ExecutionException e) {
-                logger.error("ERROR {}", e.getMessage());
+                // logger.error("ERROR {}", e.getMessage());
+                StringBuilder sb = new StringBuilder();
+                for (StackTraceElement s : e.getStackTrace()) {
+                    sb.append(s.toString()).append("\n");
+                }
+                logger.error("sendPostRequestForToken ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
             }
         }
 
@@ -200,17 +323,15 @@ public class YandexApiOnline implements YandexApi {
         if (cookieStore.getCookies().stream().noneMatch((session -> session.getName().equals("Session_id")))) {
             boolean capcha = false;
             String csrf_token = "";
-            sendGetRequest(
-                    "https://passport.yandex.ru/auth/welcome?retpath=https%3A%2F%2Fpassport.yandex.ru%2F&noreturn=1",
-                    null, null);
+            sendGetRequest(API_AUTH_WELCOME_URL, null, null);
             ApiResponse csrfTokenRequest;
-            csrfTokenRequest = sendGetRequest(API_URL + "am?", "app_platform=android", null);
+            csrfTokenRequest = sendGetRequest(API_CSRF_TOKEN_URL, "app_platform=android", null);
             String title = csrfTokenRequest.response.substring(csrfTokenRequest.response.indexOf("<title"),
                     csrfTokenRequest.response.indexOf("</title>"));
             if (title.contains("Ой!")) {
                 if (readCaptchaCookie() != null) {
                     capcha = true;
-                    csrfTokenRequest = sendGetRequest(API_URL + "am?", "app_platform=android", readCaptchaCookie());
+                    csrfTokenRequest = sendGetRequest(API_CSRF_TOKEN_URL, "app_platform=android", readCaptchaCookie());
                     if (csrfTokenRequest.response.substring(csrfTokenRequest.response.indexOf("<title"),
                             csrfTokenRequest.response.indexOf("</title>")).contains("Ой!"))
                         throw new ApiException("Please login via browser and copy cookie to passportCookie.json");
@@ -233,33 +354,29 @@ public class YandexApiOnline implements YandexApi {
             String trackId = "";
             ApiResponse trackIdRequest;
             if (capcha) {
-                trackIdRequest = sendPostRequest(API_URL + "registration-validations/auth/multi_step/start",
+                trackIdRequest = sendPostRequest(API_REGISTRATION_START_URL,
                         "csrf_token=" + csrf_token + "&login=" + username, Objects.requireNonNull(readCaptchaCookie()));
             } else {
-                trackIdRequest = sendPostRequest(API_URL + "registration-validations/auth/multi_step/start",
+                trackIdRequest = sendPostRequest(API_REGISTRATION_START_URL,
                         "csrf_token=" + csrf_token + "&login=" + username, "");
             }
             JsonObject trackIdObj = JsonParser.parseString(trackIdRequest.response).getAsJsonObject();
-            if (trackIdObj.has("status")) {
-                if (trackIdObj.get("status").getAsString().equals("ok")) {
-                    if (trackIdObj.has("can_authorize")) {
-                        if (trackIdObj.get("can_authorize").getAsBoolean()) {
-                            trackId = trackIdObj.get("track_id").getAsString();
-                            logger.debug("track_id {}", trackId);
-                        }
-                    }
-
-                }
+            if (trackIdObj.has("status") && trackIdObj.get("status").getAsString().equals("ok")
+                    && trackIdObj.has("can_authorize")
+                    && Boolean.TRUE.equals(trackIdObj.get("can_authorize").getAsBoolean())
+                    && trackIdObj.has("track_id")) {
+                trackId = trackIdObj.get("track_id").getAsString();
+                logger.debug("track_id {}", trackId);
             } else {
                 throw new ApiException("Cannot fetch track_id");
             }
             ApiResponse passwordCheck;
             if (capcha) {
-                passwordCheck = sendPostRequest(API_URL + "registration-validations/auth/multi_step/commit_password",
+                passwordCheck = sendPostRequest(API_REGISTRATION_COMMIT_URL,
                         "csrf_token=" + csrf_token + "&track_id=" + trackId + "&password=" + password,
                         Objects.requireNonNull(readCaptchaCookie()));
             } else {
-                passwordCheck = sendPostRequest(API_URL + "registration-validations/auth/multi_step/commit_password",
+                passwordCheck = sendPostRequest(API_REGISTRATION_COMMIT_URL,
                         "csrf_token=" + csrf_token + "&track_id=" + trackId + "&password=" + password, "");
             }
             if (JsonParser.parseString(passwordCheck.response).getAsJsonObject().has("status")) {
@@ -279,10 +396,8 @@ public class YandexApiOnline implements YandexApi {
             } else
                 throw new ApiException("Password error");
             if (cookieStore.getCookies().stream().anyMatch((session -> session.getName().equals("Session_id")))) {
-                ApiResponse getUserToken = sendPostRequestForToken(
-                        "https://mobileproxy.passport.yandex.net/1/bundle/oauth/token_by_sessionid",
-                        "client_id=c0ebe342af7d48fbbbfcf2d2eedb8f9e&client_secret=ad0a908f0aa341a182a37ecd75bc319e&track_id="
-                                + trackId);
+                ApiResponse getUserToken = sendPostRequestForToken(API_PROXY_PASSPORT_URL,
+                        USER_TOKEN_CLIENT_ID + "&track_id=" + trackId);
                 logger.debug("Token resonse is {}", getUserToken.response);
                 JsonObject token = JsonParser.parseString(getUserToken.response).getAsJsonObject();
                 if (token.has("status")) {
@@ -290,9 +405,8 @@ public class YandexApiOnline implements YandexApi {
                         writeXtoken(token.get("access_token").getAsString());
                     }
                 }
-                ApiResponse getMusicToken = sendPostRequestForToken("https://oauth.mobile.yandex.net/1/token",
-                        "client_id=23cabbbdc6cd418abb4b39c32c41195d&client_secret=53bc75238f0c4d08a118e51fe9203300&grant_type=x-token&access_token="
-                                + token.get("access_token").getAsString());
+                ApiResponse getMusicToken = sendPostRequestForToken(OAUTH_MOBILE_URL,
+                        MUSIC_TOKEN_CLIENT_ID + "&access_token=" + token.get("access_token").getAsString());
                 JsonObject getMusicTokenJson = JsonParser.parseString(getMusicToken.response).getAsJsonObject();
                 if (getMusicTokenJson.has("access_token")) {
                     writeMusicToken(getMusicTokenJson.get("access_token").getAsString());
@@ -301,9 +415,7 @@ public class YandexApiOnline implements YandexApi {
             }
         } else {
             if (readXtoken() == null) {
-                ApiResponse getXToken = sendPostRequestForToken(
-                        "https://mobileproxy.passport.yandex.net/1/bundle/oauth/token_by_sessionid",
-                        "client_id=c0ebe342af7d48fbbbfcf2d2eedb8f9e&client_secret=ad0a908f0aa341a182a37ecd75bc319e");
+                ApiResponse getXToken = sendPostRequestForToken(API_PROXY_PASSPORT_URL, USER_TOKEN_CLIENT_ID);
                 // logger.debug("Token resonse is {}", getXToken.response);
                 JsonObject token = JsonParser.parseString(getXToken.response).getAsJsonObject();
                 if (token.has("status")) {
@@ -315,9 +427,8 @@ public class YandexApiOnline implements YandexApi {
                 }
             }
 
-            ApiResponse getMusicToken = sendPostRequestForToken("https://oauth.mobile.yandex.net/1/token",
-                    "client_id=23cabbbdc6cd418abb4b39c32c41195d&client_secret=53bc75238f0c4d08a118e51fe9203300&grant_type=x-token&access_token="
-                            + readXtoken());
+            ApiResponse getMusicToken = sendPostRequestForToken(OAUTH_MOBILE_URL,
+                    MUSIC_TOKEN_CLIENT_ID + "&access_token=" + readXtoken());
             JsonObject getMusicTokenJson = JsonParser.parseString(getMusicToken.response).getAsJsonObject();
             if (getMusicTokenJson.has("access_token")) {
                 writeMusicToken(getMusicTokenJson.get("access_token").getAsString());
@@ -326,10 +437,40 @@ public class YandexApiOnline implements YandexApi {
         return true;
     }
 
+    public boolean refreshCookie() throws ApiException {
+        String xToken = readXtoken();
+        if (xToken.isEmpty()) {
+            logger.error("refreshCookie: xToken is empty");
+            return false;
+        }
+        String trackId = "";
+        String passportHost = "";
+
+        String data = "type=x-token&retpath=https://www.yandex.ru";
+        ApiResponse trackIdResponse = sendPostRequestWithXToken(API_PROXY_AUTH_X_TOKEN_URL, data, xToken);
+        JsonObject trackIdObj = JsonParser.parseString(trackIdResponse.response).getAsJsonObject();
+        if (trackIdObj.has("status") && trackIdObj.get("status").getAsString().equals("ok")
+                && trackIdObj.has("track_id") && trackIdObj.has("passport_host")) {
+            trackId = trackIdObj.get("track_id").getAsString();
+            passportHost = trackIdObj.get("passport_host").getAsString();
+            logger.debug("track_id {}", trackId);
+
+            ApiResponse response = sendGetRequestWithXToken(passportHost + "/auth/session/", "?track_id=" + trackId,
+                    xToken);
+            if (response.httpCode != 200) {
+                logger.error("Cannot refresh cookie");
+                throw new ApiException("Cannot refresh cookie");
+            }
+        } else {
+            logger.error("Cannot refresh cookie");
+            throw new ApiException("Cannot fetch track_id");
+        }
+        return true;
+    }
+
     public APICloudDevicesResponse getDevicesList() throws ApiException {
-        ApiResponse response = sendGetRequest("https://iot.quasar.yandex.ru/m/v3/user/devices", null,
-                "Session_id=" + cookieStore.getCookies().stream()
-                        .filter((session -> session.getName().equals("Session_id"))).findFirst().get().getValue());
+        ApiResponse response = sendGetRequest(DEVICES_URL, null, "Session_id=" + cookieStore.getCookies().stream()
+                .filter((session -> session.getName().equals("Session_id"))).findFirst().get().getValue());
         Gson gson = new Gson();
         APICloudDevicesResponse resp = gson.fromJson(response.response, APICloudDevicesResponse.class);
         return Objects.requireNonNullElseGet(resp, APICloudDevicesResponse::new);
@@ -365,6 +506,18 @@ public class YandexApiOnline implements YandexApi {
             request.header(HttpHeader.COOKIE, token);
         }
         request.followRedirects(true);
+    }
+
+    private void setHeadersWithXToken(Request request, @Nullable String token) {
+        request.timeout(60, TimeUnit.SECONDS);
+        request.header(HttpHeader.USER_AGENT, YANDEX_USER_AGENT);
+        request.header(HttpHeader.CONNECTION, "keep-alive");
+        request.header(HttpHeader.ACCEPT, "*/*");
+        request.header(HttpHeader.ACCEPT_ENCODING, "deflate");
+        if (token != null) {
+            request.header("Ya-Consumer-Authorization", "OAuth " + token);
+        }
+        request.followRedirects(false);
     }
 
     public @Nullable String readCaptchaCookie() {
@@ -563,7 +716,7 @@ public class YandexApiOnline implements YandexApi {
         if (!file.exists()) {
             String[] parseToken = new String[0];
             try {
-                ApiResponse response = sendGetRequest("https://yandex.ru/quasar/iot", null, null);
+                ApiResponse response = sendGetRequest(QUASAR_IOT_URL, null, null);
                 String getCsrfTokenString = response.response.substring(response.response.indexOf("{\"csrfToken2\":\""),
                         response.response.indexOf("{\"csrfToken2\":\"") + response.response
                                 .substring(response.response.indexOf("{\"csrfToken2\":\"")).indexOf("\",\"cspNonce\""));
@@ -585,7 +738,7 @@ public class YandexApiOnline implements YandexApi {
             } else {
                 String[] parseToken = new String[0];
                 try {
-                    ApiResponse response = sendGetRequest("https://yandex.ru/quasar/iot", null,
+                    ApiResponse response = sendGetRequest(QUASAR_IOT_URL, null,
                             "Session_id=" + cookieStore.getCookies().stream()
                                     .filter((session -> session.getName().equals("Session_id"))).findFirst().get()
                                     .getValue());
@@ -607,9 +760,8 @@ public class YandexApiOnline implements YandexApi {
 
     public APIScenarioResponse getScenarios() {
         try {
-            ApiResponse response = sendGetRequest("https://iot.quasar.yandex.ru/m/user/scenarios", null,
-                    "Session_id=" + cookieStore.getCookies().stream()
-                            .filter((session -> session.getName().equals("Session_id"))).findFirst().get().getValue());
+            ApiResponse response = sendGetRequest(SCENARIOUS_URL, null, "Session_id=" + cookieStore.getCookies()
+                    .stream().filter((session -> session.getName().equals("Session_id"))).findFirst().get().getValue());
             Gson gson = new Gson();
             APIScenarioResponse scenarioJson = gson.fromJson(response.response, APIScenarioResponse.class);
             logger.debug("Scenarios json is: {}", response.response);
@@ -656,16 +808,26 @@ public class YandexApiOnline implements YandexApi {
             try {
                 ContentResponse contentResponse = request.send();
                 result.httpCode = contentResponse.getStatus();
-                if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+                if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                     result.response = contentResponse.getContentAsString();
                     return result;
+                } else if (result.httpCode == 401) {
+                    errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                    logger.error("sendPostJsonRequest: {}", errorReason);
+                    throw new ApiException(errorReason);
                 } else {
                     errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                             contentResponse.getReason());
+                    logger.error("sendPostJsonRequest: {}", errorReason);
                     throw new ApiException(errorReason);
                 }
             } catch (InterruptedException | TimeoutException | ExecutionException | ApiException e) {
-                logger.error("ERROR {}", e.getMessage());
+                // logger.error("ERROR {}", e.getMessage());
+                StringBuilder sb = new StringBuilder();
+                for (StackTraceElement s : e.getStackTrace()) {
+                    sb.append(s.toString()).append("\n");
+                }
+                logger.error("sendPostJsonRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
             }
         }
         return new ApiResponse();
@@ -700,16 +862,26 @@ public class YandexApiOnline implements YandexApi {
             try {
                 ContentResponse contentResponse = request.send();
                 result.httpCode = contentResponse.getStatus();
-                if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+                if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                     result.response = contentResponse.getContentAsString();
                     return result;
+                } else if (result.httpCode == 401) {
+                    errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                    logger.error("sendPutJsonRequest: {}", errorReason);
+                    throw new ApiException(errorReason);
                 } else {
                     errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                             contentResponse.getReason());
+                    logger.error("sendPutJsonRequest: {}", errorReason);
                     throw new ApiException(errorReason);
                 }
             } catch (InterruptedException | TimeoutException | ExecutionException | ApiException e) {
-                logger.error("ERROR {}", e.getMessage());
+                // logger.error("ERROR {}", e.getMessage());
+                StringBuilder sb = new StringBuilder();
+                for (StackTraceElement s : e.getStackTrace()) {
+                    sb.append(s.toString()).append("\n");
+                }
+                logger.error("sendPutJsonRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
             }
         }
         return new ApiResponse();
@@ -748,16 +920,26 @@ public class YandexApiOnline implements YandexApi {
             try {
                 ContentResponse contentResponse = request.send();
                 result.httpCode = contentResponse.getStatus();
-                if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+                if (result.httpCode == 200 /* || result.httpCode >= 400 && result.httpCode < 500 */) {
                     result.response = contentResponse.getContentAsString();
                     return result;
+                } else if (result.httpCode == 401) {
+                    errorReason = contentResponse.getStatus() + " " + contentResponse.getReason();
+                    logger.error("sendDeleteJsonRequest: {}", errorReason);
+                    throw new ApiException(errorReason);
                 } else {
                     errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
                             contentResponse.getReason());
+                    logger.error("sendDeleteJsonRequest: {}", errorReason);
                     throw new ApiException(errorReason);
                 }
             } catch (InterruptedException | TimeoutException | ExecutionException | ApiException e) {
-                logger.error("ERROR {}", e.getMessage());
+                // logger.error("ERROR {}", e.getMessage());
+                StringBuilder sb = new StringBuilder();
+                for (StackTraceElement s2 : e.getStackTrace()) {
+                    sb.append(s2.toString()).append("\n");
+                }
+                logger.error("sendDeleteJsonRequest ERROR: {}. Stacktrace: \n{}", e.getMessage(), sb.toString());
             }
         }
         return new ApiResponse();
