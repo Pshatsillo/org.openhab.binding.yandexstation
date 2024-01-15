@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2023 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -41,12 +41,12 @@ public class YandexStationScenarios {
     String jsonScenario = "";
     public static String SEPARATOR_CHARS = "---";
 
-    public void addScenario(APIScenarioResponse.Scenarios scn, Channel channel, String x) {
+    public void addScenario(APIScenarioResponse.Scenarios scn, Channel channel) {
         this.scn = scn;
         this.channel = channel;
     }
 
-    public APIScenarioResponse.@Nullable Scenarios getScn() {
+    public APIScenarioResponse.@Nullable Scenarios getScenarios() {
         return scn;
     }
 

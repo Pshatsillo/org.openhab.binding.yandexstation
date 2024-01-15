@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2010-2023 Contributors to the openHAB project
+ * Copyright (c) 2010-2024 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -12,7 +12,9 @@
  */
 package org.openhab.binding.yandexstation.internal;
 
-import static org.openhab.binding.yandexstation.internal.YandexStationBindingConstants.*;
+import static org.openhab.binding.yandexstation.internal.YandexStationBindingConstants.THING_TYPE_BRIDGE;
+import static org.openhab.binding.yandexstation.internal.YandexStationBindingConstants.THING_TYPE_SCENARIO;
+import static org.openhab.binding.yandexstation.internal.YandexStationBindingConstants.THING_TYPE_STATION;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -84,7 +86,7 @@ public class YandexStationHandlerFactory extends BaseThingHandlerFactory {
             }
         } else if (THING_TYPE_SCENARIO.equals(thingTypeUID)) {
             try {
-                return new YandexScenariosHandler(thing);
+                return new YandexScenariosHandler(thing, apiFactory);
             } catch (ApiException e) {
                 throw new RuntimeException(e);
             }
