@@ -13,9 +13,15 @@
 package org.openhab.binding.yandexstation.internal;
 
 import static org.openhab.binding.yandexstation.internal.YandexStationScenarios.SEPARATOR_CHARS;
+import static org.openhab.binding.yandexstation.internal.yandexapi.QuasarApi.FILE_SCENARIOS;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,7 +89,21 @@ public class YandexScenariosHandler extends BaseThingHandler {
      */
     public YandexScenariosHandler(Thing thing, YandexApiFactory apiFactory) throws ApiException {
         super(thing);
-        this.quasar = (QuasarApi) apiFactory.getApiOnline(this.getThing().getUID().getId());
+        this.quasar = (QuasarApi) apiFactory.getApiOnline(Objects.requireNonNull(thing.getBridgeUID()).getId());
+    }
+
+    private void saveScenariosToFile() {
+        File f = quasar.getFile(FILE_SCENARIOS);
+        if (f.exists()) {
+            f.delete();
+        }
+        Arrays.stream(scenarioResponse.scenarios).forEach(scenario -> {
+            try {
+                Files.writeString(f.toPath(), scenario.id + ": " + scenario.name, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     private void updateScenarios() throws ApiException {
@@ -156,6 +176,8 @@ public class YandexScenariosHandler extends BaseThingHandler {
     private void initScenarios() throws ApiException {
         url = quasar.getWssUrl();
         scenarioResponse = quasar.getScenarios();
+        saveScenariosToFile();
+
         device = quasar.getDevices();
         updateScenarios();
         deleteScenarios();
@@ -174,25 +196,21 @@ public class YandexScenariosHandler extends BaseThingHandler {
                     break;
                 }
             }
-            this.quasar = yandexStationBridge.getQuasarApi();
+
             try {
                 initScenarios();
             } catch (ApiException e) {
                 logger.debug("Error {}", e.getMessage());
                 updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
-                try {
-                    if (quasar.refreshCookie()) {
-                        initScenarios();
-                    }
-                } catch (ApiException ex) {
-                    // throw new RuntimeException(ex);
-                    updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
-                }
             }
-            if (refreshPollingJob == null || refreshPollingJob.isCancelled()) {
-                refreshPollingJob = scheduler.scheduleWithFixedDelay(() -> ping(), 0, 1, TimeUnit.MINUTES);
-            }
+
             initJob = connect(0);
+        }
+    }
+
+    private void startRefreshPollingJob() {
+        if (refreshPollingJob == null || refreshPollingJob.isCancelled()) {
+            refreshPollingJob = scheduler.scheduleWithFixedDelay(() -> ping(), 0, 1, TimeUnit.MINUTES);
         }
     }
 
@@ -221,11 +239,12 @@ public class YandexScenariosHandler extends BaseThingHandler {
     }
 
     private Future<?> connect(int wait) {
-        logger.warn("Try connect after: {} sec", wait);
+        logger.warn("Yandex Scenario try connect websocket in {} sec", wait);
         return scheduler.schedule(() -> {
             boolean thingReachable = connectStation(url);
             if (thingReachable) {
                 updateStatus(ThingStatus.ONLINE);
+                startRefreshPollingJob();
             }
         }, wait, TimeUnit.SECONDS);
     }
@@ -315,31 +334,33 @@ public class YandexScenariosHandler extends BaseThingHandler {
     private void updateChannel(String value, String id) {
         String subst = value.split(SEPARATOR_CHARS)[1];
         int yaScnId = decode(subst);
-        YandexStationScenarios scn = scenarioList.get(yaScnId);
-        Map<String, String> device = this.device;
-        String event = device.get(id);
-        if (event != null) {
-            triggerChannel(Objects.requireNonNull(scn.getChannel()).getUID(), event);
-            updateState(scn.getChannel().getUID(), OnOffType.ON);
+        if (scenarioList.containsKey(yaScnId)) {
+            YandexStationScenarios scn = scenarioList.get(yaScnId);
+            Map<String, String> device = this.device;
+            String event = device.get(id);
+            if (event != null) {
+                triggerChannel(Objects.requireNonNull(scn.getChannel()).getUID(), event);
+                updateState(scn.getChannel().getUID(), OnOffType.ON);
+            } else {
+                logger.warn("Device with id {} is not recognized", id);
+                triggerChannel(Objects.requireNonNull(scn.getChannel()).getUID());
+                updateState(scn.getChannel().getUID(), OnOffType.ON);
+            }
         } else {
-            logger.warn("Device with id {} is not recognized", id);
-            triggerChannel(Objects.requireNonNull(scn.getChannel()).getUID());
-            updateState(scn.getChannel().getUID(), OnOffType.ON);
+            logger.error("unknown scenario {} executed", yaScnId);
         }
     }
 
     private void reconnectWebsocket() {
-        logger.debug("Try to reconnect");
+        logger.debug("Yandex Scenario Handler try to reconnect websocket");
         try {
             url = quasar.getWssUrl();
         } catch (ApiException e) {
             updateStatus(ThingStatus.OFFLINE, ThingStatusDetail.OFFLINE.COMMUNICATION_ERROR, e.getMessage());
         }
-        Future<?> job = initJob;
-        if (job != null) {
-            job.cancel(true);
-            initJob = null;
-        }
+
+        cancelInitJob();
+        cancelPollingJob();
         initJob = connect(reconnectInterval);
     }
 
@@ -382,25 +403,40 @@ public class YandexScenariosHandler extends BaseThingHandler {
     }
 
     private void ping() {
-        // YandexStationCommand sendCommand = new YandexStationCommand(CMD_PING);
-        // YandexStationSendPacket yandexPacket = new YandexStationSendPacket(device_token, sendCommand);
-        // logger.debug("Send packet: {}", yandexPacket);
         yandexStationWebsocket.sendMessage("{\"ping\"}");
+    }
+
+    private void cancelInitJob() {
+        Future<?> job = initJob;
+        if (job != null) {
+            job.cancel(true);
+            initJob = null;
+        }
+    }
+
+    private void cancelPollingJob() {
+        Future<?> job = refreshPollingJob;
+        if (job != null) {
+            job.cancel(true);
+            refreshPollingJob = null;
+        }
     }
 
     @Override
     public void dispose() {
         dispose = true;
-        logger.debug("dispose");
+        logger.debug("{} dispose", getThing().getLabel());
         try {
             webSocketClient.stop();
-            Future<?> job = initJob;
-            if (job != null) {
-                job.cancel(true);
-                initJob = null;
-            }
+            cancelInitJob();
+            cancelPollingJob();
         } catch (Exception ignored) {
         }
         super.dispose();
+    }
+
+    @Override
+    public void handleRemoval() {
+        super.handleRemoval();
     }
 }

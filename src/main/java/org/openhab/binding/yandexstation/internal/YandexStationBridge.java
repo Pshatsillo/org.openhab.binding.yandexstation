@@ -13,17 +13,21 @@
 package org.openhab.binding.yandexstation.internal;
 
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.yandexstation.internal.discovery.YandexStationDiscoveryService;
 import org.openhab.binding.yandexstation.internal.yandexapi.*;
 import org.openhab.binding.yandexstation.internal.yandexapi.response.ApiDeviceResponse;
+import org.openhab.core.config.core.Configuration;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.ChannelUID;
 import org.openhab.core.thing.ThingStatus;
 import org.openhab.core.thing.ThingStatusDetail;
 import org.openhab.core.thing.binding.BaseBridgeHandler;
 import org.openhab.core.types.Command;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The {@link YandexStationBindingConstants} class defines common constants, which are
@@ -32,6 +36,8 @@ import org.openhab.core.types.Command;
  * @author "Dmintry P (d51x)" - Initial contribution
  */
 public class YandexStationBridge extends BaseBridgeHandler {
+
+    private final Logger logger = LoggerFactory.getLogger(YandexStationBridge.class);
     /**
      * The Api (Glagol).
      */
@@ -62,6 +68,43 @@ public class YandexStationBridge extends BaseBridgeHandler {
         super(bridge);
         api = (YandexApiImpl) apiFactory.getApi();
         quasarApi = (QuasarApi) apiFactory.getApiOnline(this.getThing().getUID().getId());
+    }
+
+    @Override
+    public void handleRemoval() {
+        logger.debug("{} removing ...", getThing().getLabel());
+        super.handleRemoval();
+        quasarApi.deleteCookieFile();
+        quasarApi.deleteCaptchaFile();
+        quasarApi.deleteSessionFile();
+        quasarApi.deleteXTokenFile();
+        quasarApi.deleteMusicTokenFile();
+        quasarApi.deleteCsrfTokenFile();
+        quasarApi.deleteScenariosFile();
+    }
+
+    @Override
+    protected void updateConfiguration(Configuration configuration) {
+        super.updateConfiguration(configuration);
+        logger.debug("thing updateConfiguration");
+        // if (configuration.containsKey("cookies")) {
+        // Object cookies = configuration.get("cookies");
+        // if (cookies == null) {
+        // quasarApi.deleteCookieFile();
+        // }
+        // }
+    }
+
+    @Override
+    public void handleConfigurationUpdate(Map<String, Object> configurationParameters) {
+        super.handleConfigurationUpdate(configurationParameters);
+        logger.info("thing handleConfigurationUpdate");
+    }
+
+    @Override
+    public void dispose() {
+        super.dispose();
+        logger.debug("{} disabled", getThing().getLabel());
     }
 
     @Override
@@ -99,9 +142,5 @@ public class YandexStationBridge extends BaseBridgeHandler {
      */
     public List<ApiDeviceResponse> getDevices() {
         return devicesList;
-    }
-
-    public QuasarApi getQuasarApi() {
-        return quasarApi;
     }
 }
