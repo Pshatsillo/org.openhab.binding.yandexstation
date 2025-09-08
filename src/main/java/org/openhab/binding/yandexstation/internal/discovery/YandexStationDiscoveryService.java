@@ -12,6 +12,7 @@
  */
 package org.openhab.binding.yandexstation.internal.discovery;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -26,8 +27,11 @@ import org.openhab.core.config.discovery.AbstractDiscoveryService;
 import org.openhab.core.config.discovery.DiscoveryResult;
 import org.openhab.core.config.discovery.DiscoveryResultBuilder;
 import org.openhab.core.config.discovery.DiscoveryService;
+import org.openhab.core.io.transport.mdns.MDNSClient;
 import org.openhab.core.thing.ThingUID;
+import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,12 +51,17 @@ public class YandexStationDiscoveryService extends AbstractDiscoveryService {
      * The constant yandexTokenBridgeBusList.
      */
     public static List<YandexStationBridge> yandexTokenBridgeBusList = new ArrayList<>();
+    private final MDNSClient mdnsClient;
+
+    private static final Duration FOREGROUND_SCAN_TIMEOUT = Duration.ofMillis(200);
 
     /**
      * Instantiates a new Yandex station discovery service.
      */
-    public YandexStationDiscoveryService() {
+    @Activate
+    public YandexStationDiscoveryService(@Reference MDNSClient mdnsClient) {
         super(Collections.singleton(YandexStationBindingConstants.THING_TYPE_BRIDGE), 30, false);
+        this.mdnsClient = mdnsClient;
     }
 
     @Override

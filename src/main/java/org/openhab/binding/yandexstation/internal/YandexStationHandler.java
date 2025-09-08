@@ -73,6 +73,7 @@ import org.openhab.binding.yandexstation.internal.yandexapi.YandexApiFactory;
 import org.openhab.binding.yandexstation.internal.yandexapi.YandexApiImpl;
 import org.openhab.binding.yandexstation.internal.yandexapi.response.ApiDeviceResponse;
 import org.openhab.core.config.core.Configuration;
+import org.openhab.core.io.transport.mdns.MDNSClient;
 import org.openhab.core.library.types.DecimalType;
 import org.openhab.core.library.types.NextPreviousType;
 import org.openhab.core.library.types.OnOffType;
@@ -129,9 +130,10 @@ public class YandexStationHandler extends BaseThingHandler {
      *
      * @param thing the thing
      * @param apiFactory the api factory
+     * @param mdnsClient
      * @throws ApiException the api exception
      */
-    public YandexStationHandler(Thing thing, YandexApiFactory apiFactory) throws ApiException {
+    public YandexStationHandler(Thing thing, YandexApiFactory apiFactory, MDNSClient mdnsClient) throws ApiException {
         super(thing);
         this.api = (YandexApiImpl) apiFactory.getApi();
     }
@@ -643,14 +645,18 @@ public class YandexStationHandler extends BaseThingHandler {
 
             config.platform = device.platform;
             config.device_token = token;
-
-            logger.info("Yandex station IP's: {}", device.networkInfo.ipAdresses);
+            if (device.networkInfo != null) {
+                config.hostname = Objects.requireNonNull(device.networkInfo.ipAdresses.stream()
+                        .filter(ip -> !ip.startsWith("169.254") && !ip.contains(":")).findFirst().orElse(null));
+            } else {
+                config.hostname = config.ip;
+            }
+            logger.info("Yandex station IP's: {}", config.hostname);
 
             // config.hostname = device.networkInfo.ipAdresses.get(0);
-            config.hostname = Objects.requireNonNull(device.networkInfo.ipAdresses.stream()
-                    .filter(ip -> !ip.startsWith("169.254") && !ip.contains(":")).findFirst().orElse(null));
-            config.port = String.valueOf(device.networkInfo.port);
-
+            if (device.networkInfo != null) {
+                config.port = String.valueOf(device.networkInfo.port);
+            }
             Configuration configuration = thing.getConfiguration();
             configuration.put("device_token", token);
             configuration.put("platform", device.platform);
@@ -676,10 +682,12 @@ public class YandexStationHandler extends BaseThingHandler {
         Map<String, String> properties = new HashMap<>();
         properties.put("Support Local API:",
                 YandexStationTypes.isLocalApi(device.platform) ? "Supported" : "Not Supported");
-        properties.put("Wifi SSID:", device.networkInfo.wifiSSID);
-        // properties.put("IP Address:", device.networkInfo.ipAdresses.get(0));
-        properties.put("IP Address:", Objects.requireNonNull(device.networkInfo.ipAdresses.stream()
-                .filter(ip -> !ip.startsWith("169.254") && !ip.contains(":")).findFirst().orElse(null)));
+        if (device.networkInfo != null) {
+            properties.put("Wifi SSID:", device.networkInfo.wifiSSID);
+            // properties.put("IP Address:", device.networkInfo.ipAdresses.get(0));
+            properties.put("IP Address:", Objects.requireNonNull(device.networkInfo.ipAdresses.stream()
+                    .filter(ip -> !ip.startsWith("169.254") && !ip.contains(":")).findFirst().orElse(null)));
+        }
         properties.put("Platform:", device.platform);
         properties.put("Device Name:", YandexStationTypes.getNameByPlatform(device.platform));
         properties.put("Friendly Name:", device.name);

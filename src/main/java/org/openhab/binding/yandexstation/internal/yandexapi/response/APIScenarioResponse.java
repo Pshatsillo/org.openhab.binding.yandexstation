@@ -14,6 +14,10 @@ package org.openhab.binding.yandexstation.internal.yandexapi.response;
 
 import org.eclipse.jdt.annotation.NonNullByDefault;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
 /**
  * The {@link APIScenarioResponse} is describing api common success response.
  *
@@ -29,10 +33,39 @@ public class APIScenarioResponse {
         scenarios = new Scenarios[0];
     }
 
+    public APIScenarioResponse parseJson(JsonElement jsonElement) {
+        this.status = jsonElement.getAsJsonObject().get("status").getAsString();
+        JsonArray scenarios = jsonElement.getAsJsonObject().get("scenarios").getAsJsonArray();
+        this.scenarios = new Scenarios[scenarios.size()];
+        for (int i = 0; i < scenarios.size(); i++) {
+            JsonObject scenario = scenarios.get(i).getAsJsonObject();
+            Scenarios scn = new Scenarios();
+            scn.id = scenario.get("id").getAsString();
+            scn.name = scenario.get("name").getAsString();
+            scn.setTriggers(scenario.get("triggers").getAsJsonArray());
+            this.scenarios[i] = scn;
+        }
+        return this;
+    }
+
     public class Scenarios {
         public String id = "";
         public String name = "";
         public Triggers[] triggers = new Triggers[0];
+
+        public void setTriggers(JsonArray trg) {
+            triggers = new Triggers[trg.size()];
+            for (int i = 0; i < trg.size(); i++) {
+                Triggers trigger = new Triggers();
+                trigger.type = trg.get(i).getAsJsonObject().get("type").getAsString();
+
+                if (!trg.get(i).getAsJsonObject().get("value").isJsonObject()) {
+                    trigger.value = trg.get(i).getAsJsonObject().get("value").getAsString();
+                    triggers[i] = trigger;
+                }
+
+            }
+        }
     }
 
     public class Triggers {

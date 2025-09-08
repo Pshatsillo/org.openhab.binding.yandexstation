@@ -25,6 +25,7 @@ import org.eclipse.jdt.annotation.NonNullByDefault;
 import org.eclipse.jdt.annotation.Nullable;
 import org.openhab.binding.yandexstation.internal.yandexapi.ApiException;
 import org.openhab.binding.yandexstation.internal.yandexapi.YandexApiFactory;
+import org.openhab.core.io.transport.mdns.MDNSClient;
 import org.openhab.core.thing.Bridge;
 import org.openhab.core.thing.Thing;
 import org.openhab.core.thing.ThingTypeUID;
@@ -50,6 +51,7 @@ public class YandexStationHandlerFactory extends BaseThingHandlerFactory {
     private static final Set<ThingTypeUID> SUPPORTED_THING_TYPES_UIDS = Set.of(THING_TYPE_STATION, THING_TYPE_BRIDGE,
             THING_TYPE_SCENARIO);
     private final YandexApiFactory apiFactory;
+    private final MDNSClient mdnsClient;
 
     private static final Map<ThingUID, @NonNull YandexStationHandler> handlerMap = new HashMap<>();
 
@@ -64,8 +66,9 @@ public class YandexStationHandlerFactory extends BaseThingHandlerFactory {
      * @param apiFactory the api factory
      */
     @Activate
-    public YandexStationHandlerFactory(@Reference YandexApiFactory apiFactory) {
+    public YandexStationHandlerFactory(@Reference YandexApiFactory apiFactory, @Reference MDNSClient mdnsClient) {
         this.apiFactory = apiFactory;
+        this.mdnsClient = mdnsClient;
     }
 
     @Override
@@ -74,7 +77,7 @@ public class YandexStationHandlerFactory extends BaseThingHandlerFactory {
 
         if (THING_TYPE_STATION.equals(thingTypeUID)) {
             try {
-                return new YandexStationHandler(thing, apiFactory);
+                return new YandexStationHandler(thing, apiFactory, mdnsClient);
             } catch (ApiException e) {
                 throw new RuntimeException(e);
             }

@@ -21,6 +21,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.jdt.annotation.NonNullByDefault;
+import org.eclipse.jdt.annotation.Nullable;
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
@@ -80,6 +81,34 @@ public class YandexApiImpl implements YandexApi {
     @Override
     public ApiResponse sendGetRequest(String path, String token) throws ApiException {
         String url = API_URL + path;
+        ApiResponse result = new ApiResponse();
+        Request request = httpClient.newRequest(url);
+        setHeaders(request, token);
+        request.method(HttpMethod.GET);
+        String errorReason;
+        try {
+            ContentResponse contentResponse = request.send();
+            result.httpCode = contentResponse.getStatus();
+            if (result.httpCode == 200 || result.httpCode >= 400 && result.httpCode < 500) {
+                result.response = contentResponse.getContentAsString();
+                return result;
+            } else {
+                errorReason = String.format("Yandex API request failed with %d: %s", contentResponse.getStatus(),
+                        contentResponse.getReason());
+            }
+        } catch (TimeoutException e) {
+            errorReason = "TimeoutException: Yandex API was not reachable on your network";
+        } catch (ExecutionException e) {
+            errorReason = String.format("ExecutionException: %s", e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            errorReason = String.format("InterruptedException: %s", e.getMessage());
+        }
+        throw new ApiException(errorReason);
+    }
+
+    private ApiResponse getDeviceConfig(String deviceId, String token) throws ApiException {
+        String url = "https://iot.quasar.yandex.ru/m/v2/user/devices/" + deviceId + "/configuration";
         ApiResponse result = new ApiResponse();
 
         Request request = httpClient.newRequest(url);
@@ -170,6 +199,7 @@ public class YandexApiImpl implements YandexApi {
             if (response.httpCode == 200) {
                 JsonObject json = JsonParser.parseString(response.response).getAsJsonObject();
                 JsonArray deviceList = json.getAsJsonArray("devices");
+                // getDeviceConfig("U005R8200AE7CK", yandexToken);
                 Type listType = new TypeToken<ArrayList<ApiDeviceResponse>>() {
                 }.getType();
                 List<ApiDeviceResponse> devices = new Gson().fromJson(deviceList, listType);
@@ -187,7 +217,8 @@ public class YandexApiImpl implements YandexApi {
         }
     }
 
-    public ApiDeviceResponse findDevice(@NonNull String deviceId, @NonNull String yandexToken) throws ApiException {
+    public @Nullable ApiDeviceResponse findDevice(@NonNull String deviceId, @NonNull String yandexToken)
+            throws ApiException {
         List<ApiDeviceResponse> devices = getDevices(yandexToken);
         return devices.stream().filter(dev -> dev.id.equals(deviceId)).findFirst().orElse(new ApiDeviceResponse());
     }

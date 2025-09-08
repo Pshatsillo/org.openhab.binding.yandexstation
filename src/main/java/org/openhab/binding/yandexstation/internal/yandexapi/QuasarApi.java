@@ -635,7 +635,7 @@ public class QuasarApi implements YandexApi {
             String cookie = cookieUtils.extractSessionIdFromCookie(cookieStore);
             ApiResponse response = sendGetRequest(SCENARIOUS_URL, "", "Session_id=" + cookie);
             logger.debug("Scenarios json is: {}", response.response);
-            APIScenarioResponse resp = gson.fromJson(response.response, APIScenarioResponse.class);
+            APIScenarioResponse resp = new APIScenarioResponse().parseJson(JsonParser.parseString(response.response));
             return resp != null ? resp : new APIScenarioResponse();
 
         } catch (ApiException | NullPointerException ignored) {

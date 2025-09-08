@@ -35,6 +35,11 @@
 				<default>60</default>
 				<advanced>true</advanced>
 			</parameter>
+			<parameter name="ip" type="text">
+				<label>IP address</label>
+				<description>Station ip.</description>
+				<advanced>true</advanced>
+			</parameter>
 		</config-description>
 	</thing-type>
 

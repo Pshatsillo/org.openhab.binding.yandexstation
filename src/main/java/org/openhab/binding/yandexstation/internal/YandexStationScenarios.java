@@ -91,17 +91,20 @@ public class YandexStationScenarios {
         Gson gson = new Gson();
         if (channel.getConfiguration().get("answer") != null) {
             Steps steps = new Steps();
-            steps.type = "scenarios.steps.actions";
+            steps.type = "scenarios.steps.actions.v2";
             Parameters parameters = new Parameters();
-            parameters.launch_devices = new String[] {};
+            // parameters.launch_devices = new String[] {};
             RequestedSpeakerCapabilities requestedSpeakerCapabilities = new RequestedSpeakerCapabilities();
             Sstate sstate = new Sstate();
             sstate.instance = "phrase_action";
             sstate.value = channel.getConfiguration().get("answer").toString() + SEPARATOR_CHARS + x;
             requestedSpeakerCapabilities.type = "devices.capabilities.quasar.server_action";
             requestedSpeakerCapabilities.sstate = sstate;
-            parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
-                    requestedSpeakerCapabilities };
+            // parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
+            // requestedSpeakerCapabilities };
+            Items itm = new Items();
+            itm.requestedSpeakerCapabilities = requestedSpeakerCapabilities;
+            parameters.items = new Items[] { itm };
             steps.parameters = parameters;
             scenarioJson.steps = new Steps[] { steps };
             jsonScenario = gson.toJson(scenarioJson);
@@ -109,7 +112,7 @@ public class YandexStationScenarios {
             Steps steps = new Steps();
             steps.type = "scenarios.steps.actions";
             Parameters parameters = new Parameters();
-            parameters.launch_devices = new String[] {};
+            // parameters.launch_devices = new String[] {};
             RequestedSpeakerCapabilities requestedSpeakerCapabilities = new RequestedSpeakerCapabilities();
             Pparameters pparameters = new Pparameters();
             pparameters.instance = "text_action";
@@ -119,8 +122,11 @@ public class YandexStationScenarios {
             requestedSpeakerCapabilities.type = "devices.capabilities.quasar.server_action";
             requestedSpeakerCapabilities.parameters = pparameters;
             requestedSpeakerCapabilities.sstate = sstate;
-            parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
-                    requestedSpeakerCapabilities };
+            // parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
+            // requestedSpeakerCapabilities };
+            Items itm = new Items();
+            itm.requestedSpeakerCapabilities = requestedSpeakerCapabilities;
+            parameters.items = new Items[] { itm };
             steps.parameters = parameters;
             scenarioJson.steps = new Steps[] { steps };
             jsonScenario = gson.toJson(scenarioJson);
@@ -165,17 +171,19 @@ public class YandexStationScenarios {
         Gson gson = new Gson();
         if (channel.getConfiguration().get("answer") != null) {
             Steps steps = new Steps();
-            steps.type = "scenarios.steps.actions";
+            steps.type = "scenarios.steps.actions.v2";
             Parameters parameters = new Parameters();
-            parameters.launch_devices = new String[] {};
+            // parameters.launch_devices = new String[] {};
             RequestedSpeakerCapabilities requestedSpeakerCapabilities = new RequestedSpeakerCapabilities();
             Sstate sstate = new Sstate();
             sstate.instance = "phrase_action";
             sstate.value = channel.getConfiguration().get("answer").toString() + SEPARATOR_CHARS + x;
             requestedSpeakerCapabilities.type = "devices.capabilities.quasar.server_action";
             requestedSpeakerCapabilities.sstate = sstate;
-            parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
-                    requestedSpeakerCapabilities };
+            Items itm = new Items();
+            itm.requestedSpeakerCapabilities = requestedSpeakerCapabilities;
+            parameters.items = new Items[] { itm };
+            // requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] { requestedSpeakerCapabilities };
             steps.parameters = parameters;
             scenarioJson.steps = new Steps[] { steps };
             jsonScenario = gson.toJson(scenarioJson);
@@ -184,7 +192,7 @@ public class YandexStationScenarios {
             Steps steps = new Steps();
             steps.type = "scenarios.steps.actions";
             Parameters parameters = new Parameters();
-            parameters.launch_devices = new String[] {};
+            // parameters.launch_devices = new String[] {};
             RequestedSpeakerCapabilities requestedSpeakerCapabilities = new RequestedSpeakerCapabilities();
             Pparameters pparameters = new Pparameters();
             pparameters.instance = "text_action";
@@ -194,8 +202,8 @@ public class YandexStationScenarios {
             requestedSpeakerCapabilities.type = "devices.capabilities.quasar.server_action";
             requestedSpeakerCapabilities.parameters = pparameters;
             requestedSpeakerCapabilities.sstate = sstate;
-            parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
-                    requestedSpeakerCapabilities };
+            // parameters.requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[] {
+            // requestedSpeakerCapabilities };
             steps.parameters = parameters;
             scenarioJson.steps = new Steps[] { steps };
             jsonScenario = gson.toJson(scenarioJson);
@@ -218,11 +226,9 @@ public class YandexStationScenarios {
     }
 
     class Parameters {
-        @Nullable
-        String launch_devices[] = new String[0];
-        @Nullable
-        @SerializedName("requested_speaker_capabilities")
-        RequestedSpeakerCapabilities[] requestedSpeakerCapabilities = new RequestedSpeakerCapabilities[0];
+        // @Nullable
+        // String launch_devices[] = new String[0];
+        Items[] items = new Items[0];
     }
 
     public class RequestedSpeakerCapabilities {
@@ -233,6 +239,14 @@ public class YandexStationScenarios {
         @Nullable
         @SerializedName("state")
         Sstate sstate;
+    }
+
+    public class Items {
+        String id = "requested-device";
+        String type = "step.action.item.requested_device_with_assistant";
+        @Nullable
+        @SerializedName("value")
+        RequestedSpeakerCapabilities requestedSpeakerCapabilities = new RequestedSpeakerCapabilities();
     }
 
     public class Pparameters {

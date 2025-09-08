@@ -31,6 +31,8 @@ public class YandexStationConfiguration {
      * The Port.
      */
     public String port = WSS_PORT;
+
+    public String ip = "";
     /**
      * The Platform.
      */
